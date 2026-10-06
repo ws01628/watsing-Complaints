@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบรับเรื่องร้องทุกข์และร้องเรียน โรงพยาบาลวัดสิงห์ จังหวัดชัยนาท</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Prompt', sans-serif; background-color: #f8fafc; }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white; color: black; }
+            .shadow-md, .shadow-lg, .shadow-xl { box-shadow: none !important; }
+            .border { border-color: #cbd5e1 !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col justify-between">
+
+    <!-- HEADER -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 bg-white rounded-full p-1 border-2 border-slate-200 flex items-center justify-center overflow-hidden shadow-sm">
+                    <img src="Logo รพ.วัดสิงห์5.png" alt="โลโก้โรงพยาบาลวัดสิงห์" class="w-full h-full object-contain"
+                         onerror="this.onerror=null; this.src='https://upload.wikimedia.org/wikipedia/commons/f/f8/Thailand_MOPH_logo.png';">
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-800">ระบบรับเรื่องร้องทุกข์และร้องเรียน</h1>
+                    <p class="text-xs text-teal-700 font-medium">โรงพยาบาลวัดสิงห์ จังหวัดชัยนาท <span id="syncStatus" class="ml-2 text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">● Real-time Sync</span></p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <button onclick="fetchDataFromGoogleSheets()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-rotate text-teal-600" id="refreshSpinner"></i> ดึงข้อมูลล่าสุด
+                </button>
+                <div class="text-right hidden sm:block">
+                    <p class="text-sm font-semibold text-slate-700">เจ้าหน้าที่รับเรื่อง</p>
+                    <p class="text-xs text-slate-400">กลุ่มงานประกันสุขภาพ ยุทธศาสตร์</p>
+                </div>
+            </div>
+        </div>
+
+        <nav class="bg-slate-100 border-t border-slate-200 px-4 sm:px-8">
+            <div class="max-w-7xl mx-auto flex gap-2 overflow-x-auto py-2">
+                <button onclick="switchTab('dashboard')" id="tab-dashboard" class="px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2 bg-teal-600 text-white shadow-sm">
+                    <i class="fa-solid fa-chart-pie"></i> หน้าจอสรุป (Dashboard)
+                </button>
+                <button onclick="switchTab('form')" id="tab-form" class="px-4 py-2 rounded-lg font-medium text-sm text-slate-600 hover:bg-slate-200 transition flex items-center gap-2">
+                    <i class="fa-solid fa-pen-to-square"></i> บันทึกข้อมูลเรื่องร้องเรียน
+                </button>
+                <button onclick="switchTab('report')" id="tab-report" class="px-4 py-2 rounded-lg font-medium text-sm text-slate-600 hover:bg-slate-200 transition flex items-center gap-2">
+                    <i class="fa-solid fa-print"></i> พิมพ์รายงาน
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+
+        <!-- TAB 1: DASHBOARD -->
+        <section id="sec-dashboard" class="space-y-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-column text-teal-600"></i> สรุปเรื่องร้องเรียนและแยกประเภท รายเดือน
+                </h2>
+                <button onclick="exportSummaryExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow transition flex items-center gap-2">
+                    <i class="fa-solid fa-file-excel"></i> ดาวน์โหลดตารางเป็น Excel
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-bar text-indigo-500"></i> แผนภูมิแท่งสรุปผลการรับเรื่องร้องทุกข์/ร้องเรียน
+                    </h3>
+                    <div class="h-64 relative"><canvas id="chartResult"></canvas></div>
+                </div>
+
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-bar text-cyan-500"></i> แผนภูมิแท่งช่องทางการร้องเรียน
+                    </h3>
+                    <div class="h-64 relative"><canvas id="chartChannel"></canvas></div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                    <h3 class="font-semibold text-slate-700 text-sm">ตารางแสดงข้อมูลจำนวนรับเรื่องร้องเรียน รายเดือน</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table id="summaryTable" class="w-full text-xs text-center border-collapse">
+                        <thead>
+                            <tr class="bg-teal-700 text-white">
+                                <th rowspan="2" class="border border-teal-600 p-2.5 font-semibold">เดือน</th>
+                                <th colspan="6" class="border border-teal-600 p-2.5 font-semibold">ประเภทเรื่องร้องเรียน (เรื่อง)</th>
+                                <th colspan="3" class="border border-teal-600 p-2.5 font-semibold">สรุปผลการรับเรื่อง (เรื่อง)</th>
+                                <th rowspan="2" class="border border-teal-600 p-2.5 font-semibold bg-teal-800">รวม</th>
+                            </tr>
+                            <tr class="bg-teal-600 text-white text-[11px]">
+                                <th class="border border-teal-500 p-2">ร้องทุกข์ทั่วไป</th>
+                                <th class="border border-teal-500 p-2">ร้องทุกข์ในระบบหลักประกันฯ</th>
+                                <th class="border border-teal-500 p-2">ร้องเรียนทั่วไป</th>
+                                <th class="border border-teal-500 p-2">กรณีพฤติกรรมบริการ</th>
+                                <th class="border border-teal-500 p-2">กรณีทุจริตประพฤติมิชอบ</th>
+                                <th class="border border-teal-500 p-2">ประสานงานทางการแพทย์</th>
+                                <th class="border border-teal-500 p-2 bg-emerald-700">ยุติเรื่อง</th>
+                                <th class="border border-teal-500 p-2 bg-amber-700">รอประสานงาน/ดำเนินการ</th>
+                                <th class="border border-teal-500 p-2 bg-sky-700">ส่งต่อหน่วยงาน</th>
+                            </tr>
+                        </thead>
+                        <tbody id="summaryTableBody" class="divide-y divide-slate-200"></tbody>
+                        <tfoot id="summaryTableFoot" class="bg-slate-100 font-bold border-t-2 border-slate-300"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: DATA ENTRY FORM -->
+        <section id="sec-form" class="hidden max-w-4xl mx-auto">
+            <div class="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
+                <div class="bg-teal-700 text-white px-6 py-4 flex justify-between items-center">
+                    <h2 class="text-lg font-bold flex items-center gap-2">
+                        <i class="fa-solid fa-file-circle-plus"></i> บันทึกข้อมูลเรื่องร้องเรียน
+                    </h2>
+                    <span id="formModeBadge" class="bg-teal-800 text-xs px-3 py-1 rounded-full font-medium border border-teal-500">โหมด: บันทึกใหม่</span>
+                </div>
+
+                <form id="complaintForm" class="p-6 space-y-6">
+                    <input type="hidden" id="editIndex" value="-1">
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">1. ลำดับเรื่องร้องเรียน (อัตโนมัติ)</label>
+                            <input type="text" id="caseNo" readonly class="w-full bg-slate-200 text-teal-800 font-bold px-3 py-2 border rounded-md text-sm cursor-not-allowed">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">2. วัน เดือน ปีที่รับเรื่อง <span class="text-rose-500">*</span></label>
+                            <input type="date" id="receiveDate" required class="w-full border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-teal-500 border">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">3. เวลารับเรื่องร้องเรียน <span class="text-rose-500">*</span></label>
+                            <input type="time" id="receiveTime" required class="w-full border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-teal-500 border">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">4. ประเภทเรื่องร้องเรียน <span class="text-rose-500">*</span></label>
+                            <select id="caseType" required onchange="toggleMedicalFields()" class="w-full border-slate-300 rounded-md px-3 py-2 text-sm border bg-white">
+                                <option value="">-- เลือกประเภทเรื่อง --</option>
+                                <option value="เรื่องร้องทุกข์ทั่วไป">เรื่องร้องทุกข์ทั่วไป</option>
+                                <option value="เรื่องร้องทุกข์ในระบบหลักประกันสุขภาพ">เรื่องร้องทุกข์ในระบบหลักประกันสุขภาพ</option>
+                                <option value="เรื่องร้องเรียนทั่วไป">เรื่องร้องเรียนทั่วไป</option>
+                                <option value="เรื่องร้องเรียนกรณีพฤติกรรมบริการเจ้าหน้าที่">เรื่องร้องเรียนกรณีพฤติกรรมบริการเจ้าหน้าที่</option>
+                                <option value="เรื่องร้องเรียนกรณีทุจริตประพฤติมิชอบ">เรื่องร้องเรียนกรณีทุจริตประพฤติมิชอบ</option>
+                                <option value="การประสานงานทางการแพทย์">การประสานงานทางการแพทย์</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">5. ช่องทางการร้องเรียน <span class="text-rose-500">*</span></label>
+                            <select id="channel" required class="w-full border-slate-300 rounded-md px-3 py-2 text-sm border bg-white">
+                                <option value="">-- เลือกช่องทาง --</option>
+                                <option value="ทางโทรศัพท์">ทางโทรศัพท์</option>
+                                <option value="ทางจดหมาย">ทางจดหมาย</option>
+                                <option value="ศูนย์ดำรงธรรม">ศูนย์ดำรงธรรม</option>
+                                <option value="สำนักงานสาธารณสุขจังหวัด">สำนักงานสาธารณสุขจังหวัด</option>
+                                <option value="สำนักงานสาธารณสุขอำเภอ">สำนักงานสาธารณสุขอำเภอ</option>
+                                <option value="สายด่วน1330">สายด่วน 1330</option>
+                                <option value="ทางเว็บไซต์โรงพยาบาล/ Email">ทางเว็บไซต์โรงพยาบาล / Email</option>
+                                <option value="มาติดต่อด้วยตนเอง">มาติดต่อด้วยตนเอง</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="medicalFields" class="hidden p-4 bg-amber-50 rounded-lg border border-amber-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <p class="col-span-full text-xs font-bold text-amber-800 flex items-center gap-1">
+                            <i class="fa-solid fa-user-doctor"></i> ข้อมูลเพิ่มเติมสำหรับ การประสานงานทางการแพทย์
+                        </p>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">ชื่อ-นามสกุล เจ้าหน้าที่ประสานงาน</label>
+                            <input type="text" id="medicalStaffName" class="w-full border-slate-300 rounded-md px-3 py-2 text-sm border">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">หน่วยงานที่ประสานงาน</label>
+                            <input type="text" id="medicalDept" class="w-full border-slate-300 rounded-md px-3 py-2 text-sm border">
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
+                        <h3 class="text-xs font-bold text-teal-800 border-b pb-2">6. ข้อมูลผู้ร้องเรียน / ร้องทุกข์</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">ชื่อ-นามสกุล</label>
+                                <input type="text" id="complainantName" class="w-full border-slate-300 rounded-md px-3 py-1.5 text-sm border">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">เลขบัตรประชาชน</label>
+                                <input type="text" id="complainantId" maxlength="13" class="w-full border-slate-300 rounded-md px-3 py-1.5 text-sm border">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">เบอร์โทรศัพท์</label>
+                                <input type="text" id="complainantPhone" class="w-full border-slate-300 rounded-md px-3 py-1.5 text-sm border">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">รหัส HN / AN (ถ้ามี)</label>
+                                <input type="text" id="hnAn" class="w-full border-slate-300 rounded-md px-3 py-1.5 text-sm border">
+                            </div>
+                        </div>
+
+                        <div class="pt-2">
+                            <label class="inline-flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="isRelative" onchange="toggleRelativeModal(this.checked)" class="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500">
+                                <span class="text-xs font-semibold text-teal-900">ผู้บันทึกนี้เป็นญาติของผู้ร้องเรียน/ได้รับผลกระทบ</span>
+                            </label>
+                        </div>
+
+                        <div id="relativeSummaryBox" class="hidden bg-teal-50 p-3 rounded border border-teal-200 text-xs text-teal-900 flex justify-between items-center">
+                            <div>
+                                <span class="font-bold">ข้อมูลผู้ได้รับผลกระทบ:</span> 
+                                <span id="relSummaryText">-</span>
+                            </div>
+                            <button type="button" onclick="openRelativeModal()" class="text-teal-700 underline font-medium">แก้ไข</button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">7. รายละเอียดเรื่องร้องเรียน <span class="text-rose-500">*</span></label>
+                            <textarea id="caseDetails" required rows="3" class="w-full border-slate-300 rounded-md p-3 text-sm border"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">8. การดำเนินการ <span class="text-rose-500">*</span></label>
+                            <textarea id="actionTaken" required rows="3" class="w-full border-slate-300 rounded-md p-3 text-sm border"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">9. สรุปผลการรับเรื่องร้องทุกข์/ร้องเรียน <span class="text-rose-500">*</span></label>
+                            <select id="statusResult" required onchange="handleStatusChange()" class="w-full border-slate-300 rounded-md px-3 py-2 text-sm border bg-white">
+                                <option value="">-- เลือกสรุปผลการรับเรื่อง --</option>
+                                <option value="ยุติเรื่อง">ยุติเรื่อง</option>
+                                <option value="รอประสานงาน/ดำเนินการ">รอประสานงาน/ดำเนินการ</option>
+                                <option value="ส่งต่อหน่วยงาน">ส่งต่อหน่วยงาน</option>
+                            </select>
+                        </div>
+
+                        <div id="statusForwardGroup" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-white rounded border border-slate-200">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">ชื่อหน่วยงานที่ส่งต่อ</label>
+                                <input type="text" id="forwardDept" class="w-full border-slate-300 rounded-md px-3 py-1.5 text-sm border">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">วันที่ประสานงาน</label>
+                                <input type="date" id="forwardDate" class="w-full border-slate-300 rounded-md px-3 py-1.5 text-sm border">
+                            </div>
+                        </div>
+
+                        <div id="statusCloseGroup" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-white rounded border border-slate-200">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">วันที่ยุติเรื่อง</label>
+                                <input type="date" id="closeDate" class="w-full border-slate-300 rounded-md px-3 py-1.5 text-sm border">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">เวลาที่ยุติเรื่อง</label>
+                                <input type="time" id="closeTime" class="w-full border-slate-300 rounded-md px-3 py-1.5 text-sm border">
+                            </div>
+                        </div>
+
+                        <div id="statusPendingGroup" class="hidden space-y-3 p-3 bg-white rounded border border-slate-200">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-700 mb-1">วันที่ประสานงาน</label>
+                                    <input type="date" id="pendingDate" class="w-full border-slate-300 rounded-md px-3 py-1.5 text-sm border">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-700 mb-1">เวลาที่ประสานงาน</label>
+                                    <input type="time" id="pendingTime" class="w-full border-slate-300 rounded-md px-3 py-1.5 text-sm border">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-700 mb-1">บันทึกเพิ่มเติมสำหรับเรื่องที่รอดำเนินการ</label>
+                                <textarea id="pendingNotes" rows="2" class="w-full border-slate-300 rounded-md p-2 text-sm border"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">10. เจ้าหน้าที่รับเรื่อง <span class="text-rose-500">*</span></label>
+                        <select id="receiverStaff" required class="w-full border-slate-300 rounded-md px-3 py-2 text-sm border bg-white">
+                            <option value="">-- เลือกเจ้าหน้าที่รับเรื่อง --</option>
+                            <option value="นายจุมพล เม่าทับ">นายจุมพล เม่าทับ</option>
+                            <option value="นายนิรันดร์ ระโหฐาน">นายนิรันดร์ ระโหฐาน</option>
+                            <option value="นายสุรสิทธิ มาเย็น">นายสุรสิทธิ มาเย็น</option>
+                            <option value="นางสาววิวรรธณี มาโท">นางสาววิวรรธณี มาโท</option>
+                        </select>
+                    </div>
+
+                    <div class="pt-4 border-t flex justify-end gap-3">
+                        <button type="button" onclick="previewData()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5 shadow">
+                            <i class="fa-solid fa-magnifying-glass"></i> Preview ตรวจสอบข้อมูล
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- TAB 3: REPORT -->
+        <section id="sec-report" class="hidden space-y-6">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 no-print space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-print text-teal-600"></i> ออกรายงานเรื่องร้องเรียน
+                    </h2>
+                    <button onclick="window.print()" class="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2 rounded-lg text-sm font-medium shadow transition flex items-center gap-2">
+                        <i class="fa-solid fa-print"></i> พิมพ์รายงาน / ออกเป็น PDF
+                    </button>
+                </div>
+                <div class="max-w-md">
+                    <select id="reportTypeSelect" onchange="generateReport()" class="w-full border-slate-300 rounded-md px-3 py-2 text-sm border bg-white">
+                        <option value="byType">แสดงรายงาน ตามประเภทเรื่องร้องเรียนที่รับ</option>
+                        <option value="byChannel">แสดงรายงาน ตามช่องทางการร้องเรียน</option>
+                        <option value="byStatus">แสดงรายงาน ตามสรุปผลการรับเรื่องร้องทุกข์/ร้องเรียน</option>
+                        <option value="byStaff">แสดงรายงาน ตามเจ้าหน้าที่รับเรื่อง</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="printableReportArea" class="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+                <div class="text-center border-b pb-4 mb-6">
+                    <div class="w-16 h-16 mx-auto mb-2 bg-white rounded-full p-1 border flex items-center justify-center overflow-hidden">
+                        <img src="Logo รพ.วัดสิงห์5.png" alt="โลโก้" class="w-full h-full object-contain"
+                             onerror="this.onerror=null; this.src='https://upload.wikimedia.org/wikipedia/commons/f/f8/Thailand_MOPH_logo.png';">
+                    </div>
+                    <h2 class="text-lg font-bold text-slate-900">โรงพยาบาลวัดสิงห์ จังหวัดชัยนาท</h2>
+                    <h3 id="reportTitleHeader" class="text-md font-semibold text-teal-800">รายงานสรุปเรื่องร้องเรียน</h3>
+                    <p class="text-xs text-slate-500 mt-1">ข้อมูล ณ วันที่ <span id="reportGeneratedDate"></span></p>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs border-collapse">
+                        <thead id="reportTableHeader"></thead>
+                        <tbody id="reportTableBody" class="divide-y divide-slate-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- MODALS -->
+    <div id="relativeModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden border">
+            <div class="bg-teal-700 text-white px-4 py-3 flex justify-between items-center">
+                <h3 class="text-sm font-bold">ข้อมูลผู้ได้รับผลกระทบ</h3>
+                <button onclick="closeRelativeModal()" class="text-teal-200 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-4 space-y-3 text-xs">
+                <div><label>ชื่อ-นามสกุล</label><input type="text" id="victimName" class="w-full border rounded p-1.5"></div>
+                <div><label>เลขบัตรประชาชน</label><input type="text" id="victimId" maxlength="13" class="w-full border rounded p-1.5"></div>
+                <div><label>เบอร์โทรศัพท์</label><input type="text" id="victimPhone" class="w-full border rounded p-1.5"></div>
+            </div>
+            <div class="bg-slate-50 p-3 border-t flex justify-end">
+                <button onclick="saveRelativeData()" class="bg-teal-600 text-white px-4 py-1.5 rounded text-xs">บันทึกข้อมูล</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="previewModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="bg-indigo-700 text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="text-base font-bold"><i class="fa-solid fa-eye"></i> ตรวจสอบข้อมูลก่อนบันทึก</h3>
+                <button onclick="closePreviewModal()" class="text-indigo-200 text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="previewContent" class="p-6 overflow-y-auto space-y-4 text-xs text-slate-700"></div>
+            <div class="bg-slate-100 px-6 py-3 border-t flex justify-end gap-2">
+                <button onclick="closePreviewModal()" class="bg-amber-500 text-white px-4 py-2 rounded text-xs">แก้ไข</button>
+                <button id="btnSubmit" onclick="submitForm()" class="bg-emerald-600 text-white px-5 py-2 rounded text-xs font-semibold shadow">
+                    ยืนยันบันทึกข้อมูลไปยัง Google Sheets
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // =========================================================
+        // Web App URL จาก Google Apps Script
+        // =========================================================
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaVlaAWDOCOI8cCUlp-JxBmt7Y-Y2NndHrF1yu4lULj0zDvAFnlfunp5_U4vzC_D9Q/exec";
+
+        let complaints = [];
+        let victimDataTemp = null;
+        let chartResultObj = null;
+        let chartChannelObj = null;
+
+        const MONTHS_TH = [
+            'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม',
+            'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน'
+        ];
+
+        async function fetchDataFromGoogleSheets() {
+            const spinner = document.getElementById('refreshSpinner');
+            if (spinner) spinner.classList.add('fa-spin');
+            
+            try {
+                const res = await fetch(GOOGLE_SCRIPT_URL);
+                if (!res.ok) throw new Error("Net error");
+                complaints = await res.json();
+                
+                updateDashboard();
+                if (document.getElementById('editIndex').value === "-1") generateCaseNo();
+            } catch (err) {
+                console.warn("ไม่สามารถดึงข้อมูลจาก Google Sheets ได้ ใช้ข้อมูลในเครื่องชั่วคราว:", err);
+                complaints = JSON.parse(localStorage.getItem('wadsingh_complaints') || '[]');
+                updateDashboard();
+            } finally {
+                if (spinner) spinner.classList.remove('fa-spin');
+            }
+        }
+
+        async function submitForm() {
+            const btn = document.getElementById('btnSubmit');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังบันทึกข้อมูล...';
+
+            const data = getFormData();
+
+            try {
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                alert('บันทึกข้อมูลไปยัง Google Sheets เรียบร้อยแล้ว!');
+                closePreviewModal();
+                resetForm();
+                
+                setTimeout(fetchDataFromGoogleSheets, 1500);
+                switchTab('dashboard');
+            } catch (err) {
+                alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'ยืนยันบันทึกข้อมูลไปยัง Google Sheets';
+            }
+        }
+
+        function switchTab(tab) {
+            ['dashboard', 'form', 'report'].forEach(t => {
+                document.getElementById(`sec-${t}`).classList.add('hidden');
+                document.getElementById(`tab-${t}`).className = "px-4 py-2 rounded-lg font-medium text-sm text-slate-600 hover:bg-slate-200 transition flex items-center gap-2";
+            });
+
+            document.getElementById(`sec-${tab}`).classList.remove('hidden');
+            document.getElementById(`tab-${tab}`).className = "px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2 bg-teal-600 text-white shadow-sm";
+
+            if (tab === 'dashboard') updateDashboard();
+            if (tab === 'report') generateReport();
+            if (tab === 'form' && document.getElementById('editIndex').value === "-1") generateCaseNo();
+        }
+
+        function getFiscalYear(dateStr) {
+            const d = dateStr ? new Date(dateStr) : new Date();
+            let year = d.getFullYear() + 543;
+            if (d.getMonth() >= 9) year += 1;
+            return year;
+        }
+
+        function generateCaseNo() {
+            const recDate = document.getElementById('receiveDate').value;
+            const fiscalYear = getFiscalYear(recDate);
+            const countThisYear = complaints.filter(c => c.caseNo && String(c.caseNo).startsWith(fiscalYear.toString())).length + 1;
+            const seq = String(countThisYear).padStart(3, '0');
+            document.getElementById('caseNo').value = `${fiscalYear}/${seq}`;
+        }
+
+        function toggleMedicalFields() {
+            const val = document.getElementById('caseType').value;
+            document.getElementById('medicalFields').classList.toggle('hidden', val !== 'การประสานงานทางการแพทย์');
+        }
+
+        function toggleRelativeModal(checked) {
+            if (checked) openRelativeModal();
+            else {
+                victimDataTemp = null;
+                document.getElementById('relativeSummaryBox').classList.add('hidden');
+            }
+        }
+
+        function openRelativeModal() { document.getElementById('relativeModal').classList.remove('hidden'); }
+        function closeRelativeModal() {
+            document.getElementById('relativeModal').classList.add('hidden');
+            if (!victimDataTemp) document.getElementById('isRelative').checked = false;
+        }
+
+        function saveRelativeData() {
+            const name = document.getElementById('victimName').value.trim();
+            const id = document.getElementById('victimId').value.trim();
+            const phone = document.getElementById('victimPhone').value.trim();
+            if (!name) return alert('กรุณากรอกชื่อผู้ได้รับผลกระทบ');
+            victimDataTemp = { name, id, phone };
+            document.getElementById('relSummaryText').innerText = `${name} (${phone || '-'})`;
+            document.getElementById('relativeSummaryBox').classList.remove('hidden');
+            closeRelativeModal();
+        }
+
+        function handleStatusChange() {
+            const val = document.getElementById('statusResult').value;
+            ['Forward', 'Close', 'Pending'].forEach(g => document.getElementById(`status${g}Group`).classList.add('hidden'));
+            if (val === 'ส่งต่อหน่วยงาน') document.getElementById('statusForwardGroup').classList.remove('hidden');
+            if (val === 'ยุติเรื่อง') document.getElementById('statusCloseGroup').classList.remove('hidden');
+            if (val === 'รอประสานงาน/ดำเนินการ') document.getElementById('statusPendingGroup').classList.remove('hidden');
+        }
+
+        function getFormData() {
+            return {
+                caseNo: document.getElementById('caseNo').value,
+                receiveDate: document.getElementById('receiveDate').value,
+                receiveTime: document.getElementById('receiveTime').value,
+                caseType: document.getElementById('caseType').value,
+                channel: document.getElementById('channel').value,
+                complainantName: document.getElementById('complainantName').value,
+                complainantId: document.getElementById('complainantId').value,
+                complainantPhone: document.getElementById('complainantPhone').value,
+                hnAn: document.getElementById('hnAn').value,
+                isRelative: document.getElementById('isRelative').checked,
+                victimData: victimDataTemp,
+                caseDetails: document.getElementById('caseDetails').value,
+                actionTaken: document.getElementById('actionTaken').value,
+                statusResult: document.getElementById('statusResult').value,
+                forwardDept: document.getElementById('forwardDept').value,
+                forwardDate: document.getElementById('forwardDate').value,
+                closeDate: document.getElementById('closeDate').value,
+                closeTime: document.getElementById('closeTime').value,
+                pendingDate: document.getElementById('pendingDate').value,
+                pendingTime: document.getElementById('pendingTime').value,
+                pendingNotes: document.getElementById('pendingNotes').value,
+                medicalStaffName: document.getElementById('medicalStaffName').value,
+                medicalDept: document.getElementById('medicalDept').value,
+                receiverStaff: document.getElementById('receiverStaff').value
+            };
+        }
+
+        function previewData() {
+            const form = document.getElementById('complaintForm');
+            if (!form.checkValidity()) return form.reportValidity();
+            const data = getFormData();
+            document.getElementById('previewContent').innerHTML = `
+                <div class="grid grid-cols-2 gap-2 border-b pb-3">
+                    <div><strong>เลขที่:</strong> ${data.caseNo}</div>
+                    <div><strong>วัน/เวลา:</strong> ${data.receiveDate} ${data.receiveTime} น.</div>
+                    <div><strong>ประเภท:</strong> ${data.caseType}</div>
+                    <div><strong>ช่องทาง:</strong> ${data.channel}</div>
+                </div>
+                <div class="border-b pb-3"><strong>ผู้ร้องเรียน:</strong> ${data.complainantName || '-'}</div>
+                <div class="border-b pb-3"><strong>รายละเอียด:</strong><p class="p-2 bg-slate-50 rounded mt-1">${data.caseDetails}</p></div>
+                <div><strong>สรุปผล:</strong> ${data.statusResult} | <strong>เจ้าหน้าที่:</strong> ${data.receiverStaff}</div>
+            `;
+            document.getElementById('previewModal').classList.remove('hidden');
+        }
+
+        function closePreviewModal() { document.getElementById('previewModal').classList.add('hidden'); }
+
+        function resetForm() {
+            document.getElementById('complaintForm').reset();
+            document.getElementById('editIndex').value = "-1";
+            victimDataTemp = null;
+            document.getElementById('relativeSummaryBox').classList.add('hidden');
+            toggleMedicalFields();
+            handleStatusChange();
+            generateCaseNo();
+            const now = new Date();
+            document.getElementById('receiveDate').value = now.toISOString().split('T')[0];
+            document.getElementById('receiveTime').value = now.toTimeString().substring(0,5);
+        }
+
+        function updateDashboard() {
+            const typeKeys = ['เรื่องร้องทุกข์ทั่วไป','เรื่องร้องทุกข์ในระบบหลักประกันสุขภาพ','เรื่องร้องเรียนทั่วไป','เรื่องร้องเรียนกรณีพฤติกรรมบริการเจ้าหน้าที่','เรื่องร้องเรียนกรณีทุจริตประพฤติมิชอบ','การประสานงานทางการแพทย์'];
+            const statusKeys = ['ยุติเรื่อง','รอประสานงาน/ดำเนินการ','ส่งต่อหน่วยงาน'];
+
+            const monthlyData = MONTHS_TH.map(m => {
+                let row = { month: m, total: 0 };
+                typeKeys.forEach(k => row[k] = 0);
+                statusKeys.forEach(k => row[k] = 0);
+                return row;
+            });
+
+            complaints.forEach(c => {
+                if (!c.receiveDate) return;
+                const d = new Date(c.receiveDate);
+                const monthIndex = (d.getMonth() + 3) % 12;
+                if (monthlyData[monthIndex]) {
+                    if (c.caseType && monthlyData[monthIndex][c.caseType] !== undefined) monthlyData[monthIndex][c.caseType]++;
+                    if (c.statusResult && monthlyData[monthIndex][c.statusResult] !== undefined) monthlyData[monthIndex][c.statusResult]++;
+                    monthlyData[monthIndex].total++;
+                }
+            });
+
+            let tbodyHtml = '', totals = { total: 0 };
+            typeKeys.forEach(k => totals[k] = 0);
+            statusKeys.forEach(k => totals[k] = 0);
+
+            monthlyData.forEach(row => {
+                tbodyHtml += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="border p-2 font-medium">${row.month}</td>
+                        ${typeKeys.map(k => `<td class="border p-2">${row[k] || '-'}</td>`).join('')}
+                        ${statusKeys.map(k => `<td class="border p-2">${row[k] || '-'}</td>`).join('')}
+                        <td class="border p-2 font-bold text-teal-800 bg-slate-50">${row.total || 0}</td>
+                    </tr>`;
+                typeKeys.forEach(k => totals[k] += row[k]);
+                statusKeys.forEach(k => totals[k] += row[k]);
+                totals.total += row.total;
+            });
+
+            document.getElementById('summaryTableBody').innerHTML = tbodyHtml;
+            document.getElementById('summaryTableFoot').innerHTML = `
+                <tr>
+                    <td class="border p-2">รวม</td>
+                    ${typeKeys.map(k => `<td class="border p-2 text-teal-800">${totals[k]}</td>`).join('')}
+                    ${statusKeys.map(k => `<td class="border p-2 text-teal-800">${totals[k]}</td>`).join('')}
+                    <td class="border p-2 text-teal-900 bg-teal-100">${totals.total}</td>
+                </tr>`;
+
+            renderCharts(statusKeys, totals);
+        }
+
+        function renderCharts(statusKeys, totals) {
+            const ctx1 = document.getElementById('chartResult').getContext('2d');
+            if (chartResultObj) chartResultObj.destroy();
+            chartResultObj = new Chart(ctx1, {
+                type: 'bar',
+                data: { labels: statusKeys, datasets: [{ data: statusKeys.map(k => totals[k]), backgroundColor: ['#10b981','#f59e0b','#0284c7'] }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            const channelMap = {};
+            complaints.forEach(c => { if (c.channel) channelMap[c.channel] = (channelMap[c.channel] || 0) + 1; });
+            const ctx2 = document.getElementById('chartChannel').getContext('2d');
+            if (chartChannelObj) chartChannelObj.destroy();
+            chartChannelObj = new Chart(ctx2, {
+                type: 'bar',
+                data: { labels: Object.keys(channelMap), datasets: [{ data: Object.values(channelMap), backgroundColor: '#14b8a6' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function generateReport() {
+            const type = document.getElementById('reportTypeSelect').value;
+            document.getElementById('reportGeneratedDate').innerText = new Date().toLocaleDateString('th-TH');
+            
+            let headers = ['ลำดับ', 'เลขที่', 'วันที่รับเรื่อง', 'ประเภทเรื่อง', 'ช่องทาง', 'สรุปผล', 'การดำเนินการ'];
+            let rowsHtml = complaints.map((c, i) => `
+                <tr>
+                    <td class="p-2 border text-center">${i+1}</td>
+                    <td class="p-2 border font-bold text-center">${c.caseNo}</td>
+                    <td class="p-2 border text-center">${c.receiveDate}</td>
+                    <td class="p-2 border">${c.caseType || '-'}</td>
+                    <td class="p-2 border">${c.channel || '-'}</td>
+                    <td class="p-2 border text-center">${c.statusResult || '-'}</td>
+                    <td class="p-2 border">${c.actionTaken || '-'}</td>
+                </tr>
+            `).join('');
+
+            document.getElementById('reportTableHeader').innerHTML = `<tr class="bg-slate-100">${headers.map(h => `<th class="p-2 border">${h}</th>`).join('')}</tr>`;
+            document.getElementById('reportTableBody').innerHTML = rowsHtml || `<tr><td colspan="${headers.length}" class="text-center p-4">ไม่มีข้อมูล</td></tr>`;
+        }
+
+        function exportSummaryExcel() {
+            const wb = XLSX.utils.table_to_book(document.getElementById('summaryTable'), { sheet: "สรุปรายเดือน" });
+            XLSX.writeFile(wb, "สรุปเรื่องร้องเรียน_รพวัดสิงห์.xlsx");
+        }
+
+        window.onload = function() {
+            resetForm();
+            fetchDataFromGoogleSheets();
+            setInterval(fetchDataFromGoogleSheets, 30000);
+        };
+    </script>
+</body>
+</html>
