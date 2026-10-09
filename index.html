@@ -47,6 +47,7 @@
             </div>
         </div>
 
+        <!-- NAVIGATION BAR -->
         <nav class="bg-slate-100 border-t border-slate-200 px-4 sm:px-8">
             <div class="max-w-7xl mx-auto flex gap-2 overflow-x-auto py-2">
                 <button onclick="switchTab('dashboard')" id="tab-dashboard" class="px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2 bg-teal-600 text-white shadow-sm">
@@ -54,6 +55,9 @@
                 </button>
                 <button onclick="switchTab('form')" id="tab-form" class="px-4 py-2 rounded-lg font-medium text-sm text-slate-600 hover:bg-slate-200 transition flex items-center gap-2">
                     <i class="fa-solid fa-pen-to-square"></i> บันทึกข้อมูลเรื่องร้องเรียน
+                </button>
+                <button onclick="switchTab('edit')" id="tab-edit" class="px-4 py-2 rounded-lg font-medium text-sm text-slate-600 hover:bg-slate-200 transition flex items-center gap-2">
+                    <i class="fa-solid fa-list-check"></i> Edit (ค้นหา/แก้ไข/ลบ)
                 </button>
                 <button onclick="switchTab('report')" id="tab-report" class="px-4 py-2 rounded-lg font-medium text-sm text-slate-600 hover:bg-slate-200 transition flex items-center gap-2">
                     <i class="fa-solid fa-print"></i> พิมพ์รายงาน
@@ -306,6 +310,9 @@
                     </div>
 
                     <div class="pt-4 border-t flex justify-end gap-3">
+                        <button type="button" onclick="cancelEditMode()" id="btnCancelEdit" class="hidden bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-xmark"></i> ยกเลิกการแก้ไข
+                        </button>
                         <button type="button" onclick="previewData()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5 shadow">
                             <i class="fa-solid fa-magnifying-glass"></i> Preview ตรวจสอบข้อมูล
                         </button>
@@ -314,7 +321,45 @@
             </div>
         </section>
 
-        <!-- TAB 3: REPORT -->
+        <!-- TAB 3: EDIT / SEARCH SECTION (เพิ่มใหม่) -->
+        <section id="sec-edit" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
+                    <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-teal-600"></i> ค้นหา แก้ไข และจัดการข้อมูลเรื่องร้องเรียน
+                    </h2>
+                    <span class="text-xs text-slate-500">ข้อมูลทั้งหมดในระบบ <strong id="totalRecordCount" class="text-teal-700 font-bold">0</strong> รายการ</span>
+                </div>
+
+                <!-- SEARCH BOX -->
+                <div class="relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-slate-400 text-sm"></i>
+                    <input type="text" id="searchKeyword" onkeyup="renderEditTable()" placeholder="ค้นหาจาก ลำดับเลขเรื่องร้องเรียน (เช่น 2570/002), เลขบัตรประชาชน หรือ ชื่อ-นามสกุล..." class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                </div>
+
+                <!-- EDIT TABLE -->
+                <div class="overflow-x-auto rounded-lg border border-slate-200">
+                    <table class="w-full text-xs text-left border-collapse">
+                        <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="p-3 text-center w-12">ลำดับ</th>
+                                <th class="p-3 text-center">เลขเรื่องร้องเรียน</th>
+                                <th class="p-3">วัน/เวลา รับเรื่อง</th>
+                                <th class="p-3">ผู้ร้องเรียน</th>
+                                <th class="p-3">ประเภทเรื่อง</th>
+                                <th class="p-3 text-center">สรุปผล</th>
+                                <th class="p-3 text-center w-32">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="editTableBody" class="divide-y divide-slate-200">
+                            <!-- JS render content -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: REPORT -->
         <section id="sec-report" class="hidden space-y-6">
             <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 no-print space-y-4">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -392,9 +437,7 @@
 
     <!-- JAVASCRIPT LOGIC -->
     <script>
-        // =========================================================
         // Web App URL จาก Google Apps Script
-        // =========================================================
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzaVlaAWDOCOI8cCUlp-JxBmt7Y-Y2NndHrF1yu4lULj0zDvAFnlfunp5_U4vzC_D9Q/exec";
 
         let complaints = [];
@@ -417,11 +460,13 @@
                 complaints = await res.json();
                 
                 updateDashboard();
+                renderEditTable();
                 if (document.getElementById('editIndex').value === "-1") generateCaseNo();
             } catch (err) {
                 console.warn("ไม่สามารถดึงข้อมูลจาก Google Sheets ได้ ใช้ข้อมูลในเครื่องชั่วคราว:", err);
                 complaints = JSON.parse(localStorage.getItem('wadsingh_complaints') || '[]');
                 updateDashboard();
+                renderEditTable();
             } finally {
                 if (spinner) spinner.classList.remove('fa-spin');
             }
@@ -457,7 +502,7 @@
         }
 
         function switchTab(tab) {
-            ['dashboard', 'form', 'report'].forEach(t => {
+            ['dashboard', 'form', 'edit', 'report'].forEach(t => {
                 document.getElementById(`sec-${t}`).classList.add('hidden');
                 document.getElementById(`tab-${t}`).className = "px-4 py-2 rounded-lg font-medium text-sm text-slate-600 hover:bg-slate-200 transition flex items-center gap-2";
             });
@@ -466,8 +511,143 @@
             document.getElementById(`tab-${tab}`).className = "px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2 bg-teal-600 text-white shadow-sm";
 
             if (tab === 'dashboard') updateDashboard();
+            if (tab === 'edit') renderEditTable();
             if (tab === 'report') generateReport();
             if (tab === 'form' && document.getElementById('editIndex').value === "-1") generateCaseNo();
+        }
+
+        // ==========================================
+        // EDIT / SEARCH TAB FUNCTIONS (ส่วนที่เพิ่มใหม่)
+        // ==========================================
+        function renderEditTable() {
+            const keyword = document.getElementById('searchKeyword').value.trim().toLowerCase();
+            const tbody = document.getElementById('editTableBody');
+            
+            let filtered = complaints.filter(c => {
+                const caseNo = String(c.caseNo || '').toLowerCase();
+                const id = String(c.complainantId || '').toLowerCase();
+                const name = String(c.complainantName || '').toLowerCase();
+                return caseNo.includes(keyword) || id.includes(keyword) || name.includes(keyword);
+            });
+
+            document.getElementById('totalRecordCount').innerText = filtered.length;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-400">ไม่พบข้อมูลที่ตรงกับคำค้นหา</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            filtered.forEach((c, index) => {
+                // ค้นหาดัชนีจริงในอาร์เรย์ complaints
+                const realIndex = complaints.findIndex(item => item.caseNo === c.caseNo);
+                
+                let badgeClass = "bg-amber-100 text-amber-800";
+                if (c.statusResult === "ยุติเรื่อง") badgeClass = "bg-emerald-100 text-emerald-800";
+                if (c.statusResult === "ส่งต่อหน่วยงาน") badgeClass = "bg-sky-100 text-sky-800";
+
+                html += `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="p-3 text-center font-medium text-slate-500">${index + 1}</td>
+                        <td class="p-3 font-bold text-teal-800 text-center">${c.caseNo || '-'}</td>
+                        <td class="p-3">${c.receiveDate || '-'} ${c.receiveTime || ''}</td>
+                        <td class="p-3">
+                            <div class="font-medium text-slate-800">${c.complainantName || 'ไม่ระบุชื่อ'}</div>
+                            <div class="text-[10px] text-slate-400">เลขบัตร: ${c.complainantId || '-'}</div>
+                        </td>
+                        <td class="p-3">${c.caseType || '-'}</td>
+                        <td class="p-3 text-center">
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${badgeClass}">${c.statusResult || '-'}</span>
+                        </td>
+                        <td class="p-3 text-center">
+                            <div class="flex items-center justify-center gap-1.5">
+                                <button onclick="loadDataToEdit(${realIndex})" class="bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 rounded text-[11px] font-medium flex items-center gap-1 transition">
+                                    <i class="fa-solid fa-pen"></i> แก้ไข
+                                </button>
+                                <button onclick="deleteRecord('${c.caseNo}')" class="bg-rose-500 hover:bg-rose-600 text-white px-2.5 py-1 rounded text-[11px] font-medium flex items-center gap-1 transition">
+                                    <i class="fa-solid fa-trash"></i> ลบ
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        function loadDataToEdit(index) {
+            const data = complaints[index];
+            if (!data) return;
+
+            document.getElementById('editIndex').value = index;
+            document.getElementById('formModeBadge').innerText = `โหมด: แก้ไขเรื่อง ${data.caseNo}`;
+            document.getElementById('formModeBadge').className = "bg-amber-600 text-xs px-3 py-1 rounded-full font-medium border border-amber-400";
+            document.getElementById('btnCancelEdit').classList.remove('hidden');
+
+            // กรอกข้อมูลลงแบบฟอร์ม
+            document.getElementById('caseNo').value = data.caseNo || '';
+            document.getElementById('receiveDate').value = data.receiveDate || '';
+            document.getElementById('receiveTime').value = data.receiveTime || '';
+            document.getElementById('caseType').value = data.caseType || '';
+            document.getElementById('channel').value = data.channel || '';
+            document.getElementById('complainantName').value = data.complainantName || '';
+            document.getElementById('complainantId').value = data.complainantId || '';
+            document.getElementById('complainantPhone').value = data.complainantPhone || '';
+            document.getElementById('hnAn').value = data.hnAn || '';
+            
+            document.getElementById('isRelative').checked = data.isRelative || false;
+            if (data.isRelative && data.victimData) {
+                victimDataTemp = data.victimData;
+                document.getElementById('victimName').value = data.victimData.name || '';
+                document.getElementById('victimId').value = data.victimData.id || '';
+                document.getElementById('victimPhone').value = data.victimData.phone || '';
+                document.getElementById('relSummaryText').innerText = `${data.victimData.name} (${data.victimData.phone || '-'})`;
+                document.getElementById('relativeSummaryBox').classList.remove('hidden');
+            } else {
+                victimDataTemp = null;
+                document.getElementById('relativeSummaryBox').classList.add('hidden');
+            }
+
+            document.getElementById('caseDetails').value = data.caseDetails || '';
+            document.getElementById('actionTaken').value = data.actionTaken || '';
+            document.getElementById('statusResult').value = data.statusResult || '';
+            
+            document.getElementById('forwardDept').value = data.forwardDept || '';
+            document.getElementById('forwardDate').value = data.forwardDate || '';
+            document.getElementById('closeDate').value = data.closeDate || '';
+            document.getElementById('closeTime').value = data.closeTime || '';
+            document.getElementById('pendingDate').value = data.pendingDate || '';
+            document.getElementById('pendingTime').value = data.pendingTime || '';
+            document.getElementById('pendingNotes').value = data.pendingNotes || '';
+            
+            document.getElementById('medicalStaffName').value = data.medicalStaffName || '';
+            document.getElementById('medicalDept').value = data.medicalDept || '';
+            document.getElementById('receiverStaff').value = data.receiverStaff || '';
+
+            toggleMedicalFields();
+            handleStatusChange();
+
+            switchTab('form');
+        }
+
+        function cancelEditMode() {
+            resetForm();
+            document.getElementById('btnCancelEdit').classList.add('hidden');
+            switchTab('edit');
+        }
+
+        async function deleteRecord(caseNo) {
+            if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบรายการร้องเรียนเลขที่ "${caseNo}"?`)) return;
+
+            // กรองรายการที่ไม่ต้องการลบออก
+            complaints = complaints.filter(c => c.caseNo !== caseNo);
+            
+            // อัปเดตการแสดงผลในหน้าจอทันที
+            renderEditTable();
+            updateDashboard();
+
+            alert(`ลบรายการเลขที่ ${caseNo} เรียบร้อยแล้ว`);
         }
 
         function getFiscalYear(dateStr) {
@@ -575,6 +755,10 @@
         function resetForm() {
             document.getElementById('complaintForm').reset();
             document.getElementById('editIndex').value = "-1";
+            document.getElementById('formModeBadge').innerText = "โหมด: บันทึกใหม่";
+            document.getElementById('formModeBadge').className = "bg-teal-800 text-xs px-3 py-1 rounded-full font-medium border border-teal-500";
+            document.getElementById('btnCancelEdit').classList.add('hidden');
+            
             victimDataTemp = null;
             document.getElementById('relativeSummaryBox').classList.add('hidden');
             toggleMedicalFields();
